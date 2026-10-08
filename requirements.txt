@@ -1,0 +1,9 @@
+torch>=2.1
+torchvision>=0.16
+numpy
+pandas
+pillow
+scipy
+opencv-python
+kornia
+warmup-scheduler

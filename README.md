@@ -23,6 +23,7 @@ data/
   stanford_cars/       # torchvision.datasets.StanfordCars layout
   fgvc-aircraft-2013b/ # torchvision.datasets.FGVCAircraft layout
   flowers-102/         # torchvision.datasets.Flowers102 layout
+  cifar-100-python/    # torchvision.datasets.CIFAR100 layout (upscaled to 224x224 like the other datasets)
 filters/               # 180 filter images (9 styles x 20), included in this repository
 fractals/              # fractal images from the DiffuseMix fractal dataset
 ```
@@ -50,7 +51,7 @@ Main options (defaults in parentheses):
 
 | Option | Meaning |
 |---|---|
-| `--dataset` | `CUB`, `StanfordCars`, `FGVCAircraft`, `Flowers102` |
+| `--dataset` | `CUB`, `StanfordCars`, `FGVCAircraft`, `Flowers102`, `CIFAR100` |
 | `--model` | `ResNet18`, `ResNet50`, `ViT_B16` (ImageNet-pretrained) |
 | `--alpha` (0.4), `--radius` (16) | LFR strength and mask radius |
 | `--apply_ratio` (0.5) | fraction of each batch that is augmented |
@@ -94,6 +95,8 @@ python train.py --dataset CUB --diffusefilter 1 --baseline snapmix   # combinati
 `--baseline` accepts `mixup`, `cutmix`, `cutout`, `color_jitter`, `saliency_mix`, `puzzle_mix`, `co_mixup`,
 `snapmix`, `guided_mixup`, `patch_gaussian`, `random_crop`, `rotate`, `shear_x`, `shear_y`, `vertical_flip`.
 Their parameters are set with `--da_param1/2/3` (see `DEFAULT_PARAMS` in `diffusefilter/baselines.py`).
+By default, `rotate` rotates each image by an angle in U(-30, 30) degrees, and `patch_gaussian` adds Gaussian noise
+with sigma ~ U(0, 1) to a 112x112 patch of each image in [0, 1] space.
 SaliencyMix, PuzzleMix, Co-Mixup, SnapMix and GuidedMixup are simplified re-implementations that use
 spectral-residual saliency instead of CAM or gradient saliency.
 

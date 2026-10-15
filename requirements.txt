@@ -4,6 +4,5 @@ numpy
 pandas
 pillow
 scipy
-opencv-python
 kornia
 warmup-scheduler

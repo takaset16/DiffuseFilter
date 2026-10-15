@@ -2,7 +2,6 @@
 import math
 import random
 
-import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -100,41 +99,30 @@ def shear_y(img, level, prob, fixed):
     return _shear(img, level, prob, fixed, "y")
 
 
-def rotate(img, max_angle, prob, fixed):
-    if random.random() > 0.5:
-        max_angle = -max_angle
-    device = img.device
-    n, _, h, w = img.shape
-    rand = np.random.rand(n)
-    arr = img.to("cpu").detach().numpy().copy().transpose((0, 2, 3, 1))
-    for i in range(n):
-        if rand[i] <= prob:
-            angle = max_angle if fixed else random.uniform(0, max_angle)
-            arr[i] = cv2.resize(ndimage.rotate(arr[i], angle), (h, w))
-    return torch.from_numpy(arr.transpose((0, 3, 1, 2)).astype(np.float32)).to(device)
+def rotate(img, max_angle, prob):
+    """Rotates each image by an angle drawn from U(-max_angle, max_angle), keeping the image size."""
+    import kornia
+    n = img.shape[0]
+    angle = (torch.rand(n, device=img.device) * 2 - 1) * max_angle
+    angle = torch.where(torch.rand(n, device=img.device) < prob, angle, torch.zeros_like(angle))
+    return kornia.geometry.transform.rotate(img, angle, mode="bilinear", padding_mode="zeros")
 
 
-def patch_gaussian(x, patch_size, max_scale):
-    """Patch Gaussian (Lopes et al., 2019); one patch shared by the batch."""
-    c, w, h = x.shape[-3:]
-    gaussian = torch.normal(mean=0.0, std=max_scale, size=(c, w, h)).to(x.device)
-    gaussian_image = torch.clamp(x + gaussian, 0.0, 1.0)
-
-    mask = torch.zeros(w, w, dtype=torch.bool)
-    if patch_size == -1:
-        mask[:] = True
-    else:
-        odd = patch_size % 2 == 1
-        ch = random.randrange(0, w) if odd else random.randrange(0, w + 1)
-        cw = random.randrange(0, w) if odd else random.randrange(0, w + 1)
-        for i in range(patch_size):
-            for j in range(patch_size):
-                hh = ch - math.floor(patch_size / 2) + i
-                ww = cw - math.floor(patch_size / 2) + j
-                if 0 <= hh < w and 0 <= ww < w:
-                    mask[hh, ww] = True
-    mask = mask.repeat(c, 1, 1).to(x.device)
-    return torch.where(mask, gaussian_image, x)
+def patch_gaussian(x, patch_size, max_scale, prob):
+    """Patch Gaussian (Lopes et al., 2019) in [0, 1] space with sigma ~ U(0, max_scale) per image."""
+    mean, std = _norm_stats(x.device, x.dtype)
+    n, _, h, w = x.shape
+    img = x * std + mean
+    apply = (torch.rand(n, device=x.device) < prob).view(n, 1, 1)
+    sigma = torch.rand(n, 1, 1, 1, device=x.device) * max_scale
+    noisy = torch.clamp(img + torch.randn_like(img) * sigma, 0.0, 1.0)
+    cy = torch.randint(0, h, (n, 1, 1), device=x.device)
+    cx = torch.randint(0, w, (n, 1, 1), device=x.device)
+    ys = torch.arange(h, device=x.device).view(1, h, 1)
+    xs = torch.arange(w, device=x.device).view(1, 1, w)
+    mask = ((ys - cy).abs() <= patch_size // 2) & ((xs - cx).abs() <= patch_size // 2) & apply
+    img = torch.where(mask.unsqueeze(1), noisy, img)
+    return (img - mean) / std
 
 
 # ---------------------------------------------------------------------------
@@ -243,11 +231,11 @@ def color_jitter(x, strength=0.4, hue=0.1, prob=1.0):
 
 # Default (da_param1, da_param2, da_param3) when not given on the command line.
 DEFAULT_PARAMS = {
-    "patch_gaussian": (1.0, 1.0, 1.0),  # patch size, max scale
+    "patch_gaussian": (112, 1.0, 1.0),  # patch size, max sigma, prob
     "vertical_flip": (0.5, 1.0, 1.0),   # prob
     "random_crop": (1.0, 1.0, 1.0),     # prob
     "cutout": (1.0, 1.0, 1.0),          # prob
-    "rotate": (1.0, 1.0, 1.0),          # max angle, prob
+    "rotate": (30.0, 1.0, 1.0),         # max angle (degrees), prob
     "shear_x": (1.0, 1.0, 1.0),         # magnitude index, prob
     "shear_y": (1.0, 1.0, 1.0),         # magnitude index, prob
     "guided_mixup": (1.0, 1.0, 0.7),    # alpha, prob, guidance strength
@@ -272,7 +260,7 @@ def apply_baseline(name, x, y, num_classes, p1=None, p2=None, p3=None, fixed=Fal
     p3 = d3 if p3 is None else p3
 
     if name == "patch_gaussian":
-        x = patch_gaussian(x, int(p1), p2)
+        x = patch_gaussian(x, int(p1), float(p2), float(p3))
     elif name == "vertical_flip":
         x = vertical_flip(x, p1)
     elif name == "random_crop":
@@ -280,7 +268,7 @@ def apply_baseline(name, x, y, num_classes, p1=None, p2=None, p3=None, fixed=Fal
     elif name == "cutout":
         x = cutout(x, p1)
     elif name == "rotate":
-        x = rotate(x, p1, p2, fixed)
+        x = rotate(x, float(p1), float(p2))
     elif name == "shear_x":
         x = shear_x(x, p1, p2, fixed)
     elif name == "shear_y":

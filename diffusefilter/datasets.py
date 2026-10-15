@@ -11,8 +11,8 @@ from torchvision import transforms
 
 from .augment import IMAGENET_MEAN, IMAGENET_STD
 
-DATASETS = ("CUB", "StanfordCars", "FGVCAircraft", "Flowers102")
-NUM_CLASSES = {"CUB": 200, "StanfordCars": 196, "FGVCAircraft": 100, "Flowers102": 102}
+DATASETS = ("CUB", "StanfordCars", "FGVCAircraft", "Flowers102", "CIFAR100")
+NUM_CLASSES = {"CUB": 200, "StanfordCars": 196, "FGVCAircraft": 100, "Flowers102": 102, "CIFAR100": 100}
 
 TRAIN_TRANSFORM = transforms.Compose([
     transforms.Resize((256, 256)),
@@ -64,6 +64,8 @@ def _official(name, data_root, split, transform):
                                                  transform=transform)
     if name == "Flowers102":
         return torchvision.datasets.Flowers102(root=data_root, split=split, transform=transform)
+    if name == "CIFAR100":
+        return torchvision.datasets.CIFAR100(root=data_root, train=(split == "train"), transform=transform)
     raise ValueError(f"unknown dataset: {name}")
 
 
@@ -176,6 +178,8 @@ def build_train_val(name, data_root, val_ratio=0.1, split_seed=0):
     d_ev = _official(name, data_root, "train", TEST_TRANSFORM)
     if name == "CUB":
         labels = (d_tr.data["target"].values - 1).tolist()
+    elif name == "CIFAR100":
+        labels = list(d_tr.targets)
     else:
         labels = [lbl for _, lbl in d_tr._samples]
     tr, va = _stratified_split(labels, val_ratio, split_seed)

@@ -80,7 +80,7 @@ python train.py --dataset CUB --diffusefilter 1 --radius 8 --alpha 0.6 --val_mod
 |---|---|
 | Without the mask concatenation / filter / fractal | `--use_concat 0`, `--use_filter 0`, `--use_fractal 0` |
 | Mask shape, amplitude normalization | `--mask_shape {circle,square,gaussian}`, `--amp_norm 0` |
-| Composite operator | `--composite {lfr,fda,pixel,reinhard,colorjitter}`. FDA: `--composite fda --mask_shape square --amp_norm 0`; FDA with the LFR mask: `--composite fda`; APR: `--composite fda --radius 10000 --mask_shape square --amp_norm 0`; pixel blend: `--composite pixel --alpha 0.3` |
+| Composite operator | `--composite {lfr,fda,pixel,reinhard,colorjitter}` (`reinhard`: Reinhard color transfer in Lab; since v1.1 only L* is clipped). FDA: `--composite fda --mask_shape square --amp_norm 0`; FDA with the LFR mask: `--composite fda`; APR: `--composite fda --radius 10000 --mask_shape square --amp_norm 0`; pixel blend: `--composite pixel --alpha 0.3` |
 | Fractal blending weight of DiffuseMix | `--fractal_alpha 0.2` |
 | Filter source | `--filter_dir <dir>`; control sets are made with `scripts/make_control_filters.py` (`powerlaw`, `phase_rand`, `random_smooth`, `solid`, `natural`) |
 | Number of filters, prompts | `--filters_per_style N`, `--filter_styles snowy,aurora` |
@@ -93,12 +93,20 @@ python train.py --dataset CUB --diffusefilter 1 --baseline snapmix   # combinati
 ```
 
 `--baseline` accepts `mixup`, `cutmix`, `cutout`, `color_jitter`, `saliency_mix`, `puzzle_mix`, `co_mixup`,
-`snapmix`, `guided_mixup`, `patch_gaussian`, `random_crop`, `rotate`, `shear_x`, `shear_y`, `vertical_flip`.
+`snapmix`, `snapmix_area`, `guided_mixup`, `patch_gaussian`, `random_crop`, `rotate`, `shear_x`, `shear_y`, `vertical_flip`.
 Their parameters are set with `--da_param1/2/3` (see `DEFAULT_PARAMS` in `diffusefilter/baselines.py`).
 By default, `rotate` rotates each image by an angle in U(-30, 30) degrees, and `patch_gaussian` adds Gaussian noise
 with sigma ~ U(0, 1) to a 112x112 patch of each image in [0, 1] space.
-SaliencyMix, PuzzleMix, Co-Mixup, SnapMix and GuidedMixup are simplified re-implementations that use
-spectral-residual saliency instead of CAM or gradient saliency.
+`snapmix` is SnapMix re-implemented from the [official code](https://github.com/Shaoli-Huang/SnapMix)
+(`diffusefilter/snapmix_official.py`): the labels are weighted by the class activation maps of the model being trained,
+with the official defaults (beta = 5, probability 1); ResNets only. With the same random numbers it reproduces the
+official functions exactly. `snapmix_area` is the simplified version of v1.0, which weights the labels by the pasted area
+(rows "area labels, simplified" in Table 4).
+SaliencyMix uses spectral-residual saliency, as in the original paper. PuzzleMix and Co-Mixup are simplified
+re-implementations: they use spectral-residual saliency instead of gradient saliency, PuzzleMix swaps grid patches
+by saliency instead of optimizing the mask and the transport, and Co-Mixup samples patches in proportion to saliency
+instead of solving its supermodular optimization. GuidedMixup is not reported in the paper because this simplified
+version did not reproduce the original method.
 
 ### DiffuseMix
 
@@ -112,8 +120,16 @@ python train.py --dataset CUB --diffusemix combine --dm_max_k 0 --epochs 10
 python train.py --dataset CUB --diffusemix only --dm_max_k 0 --epochs 11
 ```
 
+`scripts/make_fig4.py` draws Figure 4 (the change in the Fourier spectrum caused by LFR before and after clipping).
+
 `scripts/check_lfr_equivalence.py` checks numerically that LFR equals `x + alpha (L s - L x)` in the spatial
 domain, where `L` is an ideal low-pass filter.
+
+## Versions
+
+- v1.1: code for the second revision of the paper. Adds SnapMix from the official code (`--baseline snapmix`;
+  the earlier version is `snapmix_area`), fixes the Lab clipping of `--composite reinhard`, adds `scripts/make_fig4.py`.
+- v1.0: code for the first revision.
 
 ## Citation
 

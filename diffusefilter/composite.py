@@ -103,7 +103,10 @@ def reinhard_color_transfer(content, style):
     s_mean = style_lab.mean(dim=(2, 3), keepdim=True)
     s_std = style_lab.std(dim=(2, 3), keepdim=True)
     out_lab = (content_lab - c_mean) / c_std * s_std + s_mean
-    out_rgb = kornia.color.lab_to_rgb(out_lab.clamp(0, 100))
+    # Clip only L* to [0, 100]; a* and b* are signed. (v1.0 clipped all three channels to [0, 100],
+    # which removed the green and blue directions; Table 7 of the revised paper uses this corrected version.)
+    out_lab = torch.cat([out_lab[:, :1].clamp(0, 100), out_lab[:, 1:]], dim=1)
+    out_rgb = kornia.color.lab_to_rgb(out_lab)
     return out_rgb.clamp(0, 1)
 
 

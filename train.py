@@ -151,7 +151,8 @@ def main():
             if augment is not None:
                 images = augment(images)
             images, labels = apply_baseline(args.baseline, images, labels, num_classes,
-                                            args.da_param1, args.da_param2, args.da_param3, bool(args.da_fixed))
+                                            args.da_param1, args.da_param2, args.da_param3, bool(args.da_fixed),
+                                            model=model)
 
             optimizer.zero_grad(set_to_none=True)
             with autocast(device_type=device.type, dtype=torch.float16):

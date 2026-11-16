@@ -242,7 +242,8 @@ DEFAULT_PARAMS = {
     "saliency_mix": (1.0, 0.5, 1.0),    # beta, prob
     "puzzle_mix": (1.0, 1.0, 4.0),      # alpha, prob, grid size
     "co_mixup": (0.5, 2.0, 1.0),        # prob, grid size
-    "snapmix": (1.0, 1.0, 1.0),         # beta, prob
+    "snapmix": (5.0, 1.0, 1.0),         # beta, prob (official SnapMix with CAM label weights; needs the model)
+    "snapmix_area": (1.0, 1.0, 1.0),    # beta, prob (simplified variant of v1.0: area label weights)
     "mixup": (1.0, 1.0, 1.0),           # alpha, prob
     "cutmix": (1.0, 1.0, 1.0),          # alpha, prob
     "color_jitter": (0.4, 0.1, 1.0),    # strength (brightness = contrast = saturation), hue, prob
@@ -250,8 +251,9 @@ DEFAULT_PARAMS = {
 BASELINES = ("none",) + tuple(DEFAULT_PARAMS)
 
 
-def apply_baseline(name, x, y, num_classes, p1=None, p2=None, p3=None, fixed=False):
-    """Returns (images, labels); labels become soft labels for mixing methods."""
+def apply_baseline(name, x, y, num_classes, p1=None, p2=None, p3=None, fixed=False, model=None):
+    """Returns (images, labels); labels become soft labels for mixing methods.
+    `model` (the network being trained) is required by `snapmix`, which uses its class activation maps."""
     if name == "none":
         return x, y
     d1, d2, d3 = DEFAULT_PARAMS[name]
@@ -285,7 +287,12 @@ def apply_baseline(name, x, y, num_classes, p1=None, p2=None, p3=None, fixed=Fal
     elif name == "co_mixup":
         x, y = saliency.co_mixup(x, y, mix_prob=float(p1), grid_size=int(p2), num_classes=num_classes)
     elif name == "snapmix":
-        # SnapMix works in [0, 1] space.
+        if model is None:
+            raise ValueError("snapmix needs the model being trained (apply_baseline(..., model=model))")
+        from . import snapmix_official
+        x, y = snapmix_official.snapmix(x, y, model, num_classes, beta=float(p1), prob=float(p2))
+    elif name == "snapmix_area":
+        # Simplified SnapMix of v1.0 (spectral-residual saliency, area label weights). Works in [0, 1] space.
         mean, std = _norm_stats(x.device, x.dtype)
         x01 = (x * std + mean).clamp(0.0, 1.0)
         x01, y = saliency.snapmix(x01, y, beta=float(p1), prob=float(p2), num_classes=num_classes)
